@@ -143,24 +143,40 @@ router.post('/refresh-ip/:instanceId', async (req, res) => {
   const instanceId = req.params.instanceId;
 
   try {
-    const describeCommand = new DescribeAddressesCommand({ Filters: [{ Name: 'instance-id', Values: [instanceId] }] });
+    // Check if there is an Elastic IP associated with the instance
+    const describeCommand = new DescribeAddressesCommand({
+      Filters: [{ Name: 'instance-id', Values: [instanceId] }]
+    });
     const { Addresses } = await ec2.send(describeCommand);
-    
+
     if (Addresses.length === 0) {
-      return res.status(400).json({ message: 'No Elastic IP found for this instance.' });
+      // No Elastic IP found: Allocate and associate a new one
+      console.log(`No Elastic IP found for instance ${instanceId}. Allocating a new one.`);
+      const allocateCommand = new AllocateAddressCommand({ Domain: 'vpc' });
+      const allocation = await ec2.send(allocateCommand);
+
+      const associateCommand = new AssociateAddressCommand({
+        InstanceId: instanceId,
+        AllocationId: allocation.AllocationId,
+      });
+      await ec2.send(associateCommand);
+
+      return res.json({
+        message: 'New IP address allocated and associated with the EC2 instance',
+        newPublicIp: allocation.PublicIp,
+      });
     }
 
+    // If an Elastic IP exists, release it and allocate a new one
     const oldAllocationId = Addresses[0].AllocationId;
+    console.log(`Releasing old Elastic IP with AllocationId: ${oldAllocationId}`);
 
-    // Release the old Elastic IP
     const releaseCommand = new ReleaseAddressCommand({ AllocationId: oldAllocationId });
     await ec2.send(releaseCommand);
 
-    // Allocate a new Elastic IP
     const allocateCommand = new AllocateAddressCommand({ Domain: 'vpc' });
     const allocation = await ec2.send(allocateCommand);
 
-    // Associate the new IP with the EC2 instance
     const associateCommand = new AssociateAddressCommand({
       InstanceId: instanceId,
       AllocationId: allocation.AllocationId,
@@ -168,7 +184,7 @@ router.post('/refresh-ip/:instanceId', async (req, res) => {
     await ec2.send(associateCommand);
 
     res.json({
-      message: 'IP address refreshed and associated with the same EC2 instance',
+      message: 'IP address refreshed and associated with the EC2 instance',
       newPublicIp: allocation.PublicIp,
     });
   } catch (error) {
@@ -176,5 +192,6 @@ router.post('/refresh-ip/:instanceId', async (req, res) => {
     res.status(500).send('Failed to refresh IP');
   }
 });
+
 
 module.exports = router;
