@@ -1,7 +1,7 @@
-const puppeteer = require("puppeteer");
+const { chromium } = require("playwright");
 
 async function htmlToPdf(htmlContent) {
-  const browser = await puppeteer.launch();
+  const browser = await chromium.launch();
   const page = await browser.newPage();
   await page.setContent(htmlContent);
   const pdfBuffer = await page.pdf({ format: "A4" });
@@ -11,7 +11,7 @@ async function htmlToPdf(htmlContent) {
 
 // Function to convert HTML to PNG
 async function htmlToPng(htmlContent) {
-  const browser = await puppeteer.launch();
+  const browser = await chromium.launch();
   const page = await browser.newPage();
   await page.setContent(htmlContent);
   const imageBuffer = await page.screenshot({ type: "png" });
